@@ -13,6 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "${PLUGIN_ROOT}/scripts/lib/cursor-agent.sh" 2>/dev/null || true
+source "${PLUGIN_ROOT}/scripts/lib/plugin-root.sh" 2>/dev/null || true
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,13 +109,19 @@ check_deps() {
         if [[ -f "$settings_file" ]] && grep -q 'rtk' "$settings_file" 2>/dev/null; then
             rtk_hook="yes"
         fi
-        if [[ "$rtk_hook" == "yes" ]]; then
+        if declare -f octo_is_windows_git_bash >/dev/null 2>&1 && octo_is_windows_git_bash; then
+            ok+=("rtk:RTK ${rtk_ver} installed; hook check skipped on Windows Git Bash (RTK uses CLAUDE.md injection mode)")
+        elif [[ "$rtk_hook" == "yes" ]]; then
             ok+=("rtk:RTK ${rtk_ver} installed, hook active (bash output compression enabled)")
         else
             warnings+=("rtk:RTK ${rtk_ver} installed but Claude Code hook not configured. Run: rtk init -g")
         fi
     else
-        warnings+=("rtk:RTK not installed (optional) — saves 60-90% tokens on bash output. Install: brew install rtk && rtk init -g. Run /octo:doctor for guided setup.")
+        if declare -f octo_is_windows_git_bash >/dev/null 2>&1 && octo_is_windows_git_bash; then
+            warnings+=("rtk:RTK not installed (optional) — saves tokens on bash output. On Windows Git Bash, install RTK and use its CLAUDE.md injection mode instead of rtk init -g.")
+        else
+            warnings+=("rtk:RTK not installed (optional) — saves 60-90% tokens on bash output. Install: brew install rtk && rtk init -g. Run /octo:doctor for guided setup.")
+        fi
     fi
 
     # Statusline resolver

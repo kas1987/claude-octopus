@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolve the installed Octopus plugin root in `/octo:doctor` before invoking scripts so Windows Git Bash installs do not depend on `~/.claude-octopus/plugin` symlink creation (#360).
+- Skip RTK hook remediation warnings on Windows Git Bash, where RTK uses CLAUDE.md injection mode instead of the macOS/Linux hook path (#361).
+
 ---
 
 ## [9.37.0] - 2026-05-08

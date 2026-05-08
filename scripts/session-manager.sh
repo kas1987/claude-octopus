@@ -6,6 +6,7 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/session-id.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/plugin-root.sh" 2>/dev/null || true
 
 # Export session variables for Claude Code v2.1.9+
 export_session_variables() {
@@ -30,8 +31,12 @@ export_session_variables() {
     # references to ${HOME}/.claude-octopus/plugin/scripts/... resolve correctly.
     # Created BEFORE session directories so the symlink exists even if mkdir fails.
     local plugin_root="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
-    mkdir -p "${HOME}/.claude-octopus"
-    ln -sfn "$plugin_root" "${HOME}/.claude-octopus/plugin"
+    if declare -f octo_ensure_stable_plugin_root >/dev/null 2>&1; then
+        octo_ensure_stable_plugin_root "$plugin_root" >/dev/null 2>&1 || true
+    else
+        mkdir -p "${HOME}/.claude-octopus"
+        ln -sfn "$plugin_root" "${HOME}/.claude-octopus/plugin"
+    fi
 
     # Session directories
     export OCTOPUS_SESSION_DIR="${HOME}/.claude-octopus/sessions/${OCTOPUS_SESSION_ID}"

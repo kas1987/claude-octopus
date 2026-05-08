@@ -7,11 +7,14 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
+source "${SCRIPT_DIR}/lib/plugin-root.sh" 2>/dev/null || true
 
 # Self-heal: ensure the stable symlink exists for LLM Bash tool access.
 # The SessionStart hook normally creates this, but if doctor (or any command)
 # is invoked before the hook fires, the symlink may be missing. (fixes #318)
-if [[ ! -e "${HOME}/.claude-octopus/plugin" ]]; then
+if declare -f octo_ensure_stable_plugin_root >/dev/null 2>&1; then
+    octo_ensure_stable_plugin_root "$PLUGIN_DIR" >/dev/null 2>&1 || true
+elif [[ ! -e "${HOME}/.claude-octopus/plugin" ]]; then
     mkdir -p "${HOME}/.claude-octopus"
     ln -sfn "$PLUGIN_DIR" "${HOME}/.claude-octopus/plugin"
 fi
