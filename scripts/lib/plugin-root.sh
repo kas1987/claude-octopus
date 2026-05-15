@@ -38,9 +38,53 @@ octo_write_stable_script_shim() {
     chmod +x "$dst" 2>/dev/null || true
 }
 
+octo_discover_plugin_root() {
+    # Auto-discover the Octopus plugin root from CC marketplace cache or Cowork
+    # plugin cache. Returns the path on stdout, or empty string on failure.
+    # Used when CLAUDE_PLUGIN_ROOT is not set (LLM Bash tool context). (#377)
+    local candidate=""
+
+    # Strategy 1: CC marketplace cache (standard install path)
+    local cache_base="${HOME}/.claude/plugins/cache/nyldn-plugins/octo"
+    if [[ -d "$cache_base" ]]; then
+        candidate="$(ls -1dt "$cache_base"/*/ 2>/dev/null | head -1)"
+        candidate="${candidate%/}"
+        if [[ -n "$candidate" && -f "${candidate}/scripts/orchestrate.sh" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    fi
+
+    # Strategy 2: Cowork / desktop-app plugin cache
+    local search_root
+    for search_root in \
+        "${HOME}/Library/Application Support/Claude" \
+        "${LOCALAPPDATA:-/dev/null}/Claude" \
+        "${XDG_DATA_HOME:-${HOME}/.local/share}/Claude"; do
+        if [[ -d "$search_root" ]]; then
+            local found
+            found="$(find "$search_root" -maxdepth 8 -path "*/nyldn-plugins/octo/*/scripts/orchestrate.sh" -print -quit 2>/dev/null)"
+            if [[ -n "$found" ]]; then
+                candidate="$(cd "$(dirname "$(dirname "$found")")" 2>/dev/null && pwd -P)"
+                if [[ -n "$candidate" ]]; then
+                    printf '%s' "$candidate"
+                    return 0
+                fi
+            fi
+        fi
+    done
+
+    return 1
+}
+
 octo_ensure_stable_plugin_root() {
     local plugin_root="$1"
     local stable_root="${2:-${HOME}/.claude-octopus/plugin}"
+
+    # If plugin_root is empty or missing, try auto-discovery (#377)
+    if [[ -z "$plugin_root" || ! -d "$plugin_root" ]]; then
+        plugin_root="$(octo_discover_plugin_root)" || true
+    fi
 
     [[ -n "$plugin_root" && -d "$plugin_root" ]] || return 1
 

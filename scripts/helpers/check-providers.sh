@@ -7,6 +7,12 @@
 # Exit code: always 0 (availability is informational, not an error)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# Self-heal: ensure ~/.claude-octopus/plugin symlink exists before proceeding.
+# Marketplace installs may not have the symlink yet if SessionStart hook hasn't
+# fired. This is a no-op when the symlink is already healthy. (fixes #377)
+bash "${SCRIPT_DIR}/ensure-plugin-root.sh" 2>/dev/null || true
+
 source "${SCRIPT_DIR}/../lib/cursor-agent.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/../lib/provider-allowlist.sh" 2>/dev/null || true
 

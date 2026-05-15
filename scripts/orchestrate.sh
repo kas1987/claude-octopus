@@ -17,6 +17,7 @@ source "${SCRIPT_DIR}/lib/plugin-root.sh" 2>/dev/null || true
 # Self-heal: ensure the stable symlink exists for LLM Bash tool access.
 # The SessionStart hook normally creates this, but if doctor (or any command)
 # is invoked before the hook fires, the symlink may be missing. (fixes #318)
+# Also handles marketplace installs where the hook may not have fired. (#377)
 if declare -f octo_ensure_stable_plugin_root >/dev/null 2>&1; then
     octo_ensure_stable_plugin_root "$PLUGIN_DIR" >/dev/null 2>&1 || true
 elif [[ ! -e "${HOME}/.claude-octopus/plugin" ]]; then
