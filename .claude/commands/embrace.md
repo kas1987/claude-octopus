@@ -22,16 +22,16 @@ aliases:
 
 ## EXECUTION MECHANISM — NON-NEGOTIABLE
 
-**Each phase MUST be executed by invoking the corresponding skill using the Skill tool. You are PROHIBITED from:**
-- Using the Agent tool to do research yourself instead of invoking `/octo:discover`
+**Each phase MUST be executed through the `orchestrate.sh` entrypoint. Direct Skill calls for the workflow phases are not permitted because they can recursively reload command instructions. You are PROHIBITED from:**
+- Using the Agent tool to do research yourself instead of running the discovery phase
 - Using WebFetch/Read/Grep as a substitute for multi-provider research
-- Implementing code directly instead of invoking `/octo:develop`
-- Using a single code-reviewer agent instead of invoking `/octo:deliver`
+- Implementing code directly instead of running the develop phase
+- Using a single code-reviewer agent instead of running the deliver phase
 - Skipping `orchestrate.sh` calls because "I can do this faster directly"
 
 **The ENTIRE POINT of `/octo:embrace` is multi-LLM orchestration.** If you execute phases using only Claude-native tools (Agent, WebFetch, Write, Edit), you have violated the command's purpose even if you followed the phase structure.
 
-**Self-check after completion:** You should be able to list the Skill invocations and orchestrate.sh commands you ran. If you used only Claude-native tools, you executed incorrectly.
+**Self-check after completion:** You should be able to list the `orchestrate.sh` commands you ran. If you used only Claude-native tools, you executed incorrectly.
 
 ---
 
@@ -134,13 +134,14 @@ Provider Availability:
 Scope: [answer]  Focus: [answer]  Autonomy: [answer]
 ```
 
-## Step 3: Execute Phases via Skill Invocations
+## Step 3: Execute Phases via orchestrate.sh
 
-**CRITICAL: Each phase MUST be invoked as a separate skill. This ensures each phase's full enforcement instructions (including orchestrate.sh dispatch) load fresh into context.**
+**CRITICAL: Each phase MUST run through `orchestrate.sh`. Do not invoke `/octo:discover`, `/octo:define`, `/octo:develop`, or `/octo:deliver` via Skill calls inside this command; direct phase dispatch prevents recursive command loading.**
 
 ### Phase 1 — Discover
 
-Run the discover phase via orchestrate.sh:
+Run the Discover phase via orchestrate.sh:
+
 ```bash
 cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh probe <user's prompt>
 ```
@@ -153,6 +154,7 @@ This will dispatch to Codex, Gemini, and other available providers. Results save
 ### Phase 2 — Define
 
 Run the define phase via orchestrate.sh:
+
 ```bash
 cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh grasp <user's prompt>
 ```
@@ -191,6 +193,7 @@ AskUserQuestion({
 ### Phase 3 — Develop
 
 Run the develop phase via orchestrate.sh:
+
 ```bash
 cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh tangle <user's prompt>
 ```
@@ -204,6 +207,7 @@ Same pattern as above but collaborative style, reviewing implementation quality.
 ### Phase 4 — Deliver
 
 Run the deliver phase via orchestrate.sh:
+
 ```bash
 cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh ink <user's prompt>
 ```
@@ -255,8 +259,8 @@ AskUserQuestion({
 
 ## Quick Reference
 
-| Phase | Skill | orchestrate.sh | Output |
-|-------|-------|----------------|--------|
+| Phase | Command | orchestrate.sh | Output |
+|-------|---------|----------------|--------|
 | Discover | `/octo:discover` | `probe-single` per provider | `probe-synthesis-*.md` |
 | Define | `/octo:define` | `grasp` | `grasp-consensus-*.md` |
 | Develop | `/octo:develop` | `tangle` | `tangle-validation-*.md` |

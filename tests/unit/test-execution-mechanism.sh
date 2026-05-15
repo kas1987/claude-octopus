@@ -115,6 +115,8 @@ if [[ -f "$EMBRACE" ]]; then
     else
         pass "embrace.md avoids recursive workflow Skill invocations"
     fi
+else
+    fail "embrace.md not found" "$EMBRACE missing"
 fi
 
 echo ""
