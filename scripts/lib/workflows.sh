@@ -782,6 +782,10 @@ ${assigned_subtask}
 Execution instructions:
 - Treat the original task as authoritative for requirements, explicit file targets, acceptance criteria, and forbidden changes.
 - Complete the assigned subtask without dropping original constraints that apply to it.
+- For [CODING] work, edit the repository files directly in the current worktree. Do not only describe a plan or paste code snippets.
+- If the subtask creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
+- Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the subtask must report a blocker.
+- In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
 - If the assigned subtask is incomplete, contradictory, or omits required context, report the blocker instead of inventing scope.
 EOF
 }

@@ -92,4 +92,14 @@ else
     test_fail "spawned prompts lost the assigned subtask text"
 fi
 
+test_case "coding subtask prompts require direct edits and integration evidence"
+if [[ "$captured_prompts" == *"edit the repository files directly"* ]] && \
+   [[ "$captured_prompts" == *"Tests alone are not integration evidence"* ]] && \
+   [[ "$captured_prompts" == *"## Worktree Changes"* ]] && \
+   [[ "$captured_prompts" == *"## Integration Evidence"* ]]; then
+    test_pass
+else
+    test_fail "spawned prompts did not require direct worktree edits and integration evidence"
+fi
+
 test_summary
