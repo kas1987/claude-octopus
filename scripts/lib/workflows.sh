@@ -768,6 +768,24 @@ EOF
     echo ""
 }
 
+build_tangle_subtask_prompt() {
+    local original_task="$1"
+    local assigned_subtask="$2"
+
+    cat <<EOF
+Original task context:
+${original_task}
+
+Assigned subtask:
+${assigned_subtask}
+
+Execution instructions:
+- Treat the original task as authoritative for requirements, explicit file targets, acceptance criteria, and forbidden changes.
+- Complete the assigned subtask without dropping original constraints that apply to it.
+- If the assigned subtask is incomplete, contradictory, or omits required context, report the blocker instead of inventing scope.
+EOF
+}
+
 # Phase 3: TANGLE (Develop) - Enhanced map-reduce with validation
 # Tentacles work together in a coordinated tangle of activity
 tangle_develop() {
@@ -924,6 +942,8 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
         subtask=$(echo "$subtask" | sed 's/\[CODING\]\s*//; s/\[REASONING\]\s*//')
         local task_id="tangle-${task_group}-${subtask_num}"
         local pane_title="$pane_icon Subtask $((subtask_num+1))"
+        local subtask_prompt
+        subtask_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "$subtask")
 
         # Tangle currently routes only CLI-backed codex/gemini workers. Its
         # completion watcher relies on .done markers written by the legacy
@@ -932,12 +952,12 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
         if [[ "$TMUX_MODE" == "true" ]]; then
             # Use async+tmux spawning
             local pid
-            pid=$(spawn_agent_async "$agent" "$subtask" "$task_id" "$role" "tangle" "$pane_title")
+            pid=$(spawn_agent_async "$agent" "$subtask_prompt" "$task_id" "$role" "tangle" "$pane_title")
             pids+=("$pid")
         else
             # Standard spawning
             local pid
-            pid=$(spawn_agent_capture_pid "$agent" "$subtask" "$task_id" "$role" "tangle")
+            pid=$(spawn_agent_capture_pid "$agent" "$subtask_prompt" "$task_id" "$role" "tangle")
             pids+=("$pid")
         fi
         task_ids+=("$task_id")
