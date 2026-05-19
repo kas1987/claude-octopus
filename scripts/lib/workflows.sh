@@ -783,11 +783,96 @@ Execution instructions:
 - Treat the original task as authoritative for requirements, explicit file targets, acceptance criteria, and forbidden changes.
 - Complete the assigned subtask without dropping original constraints that apply to it.
 - For [CODING] work, edit the repository files directly in the current worktree. Do not only describe a plan or paste code snippets.
+- For [CODING] work, treat file paths/directories named in the assigned subtask as your exclusive write scope. Do not edit files owned by another subtask; report a blocker if the required change crosses scopes.
 - If the subtask creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
 - Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the subtask must report a blocker.
 - In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
 - If the assigned subtask is incomplete, contradictory, or omits required context, report the blocker instead of inventing scope.
 EOF
+}
+
+tangle_extract_write_scopes() {
+    local text="$1"
+
+    printf '%s\n' "$text" \
+        | tr ' `",;()[]{}' '\n' \
+        | sed -nE '/^[A-Za-z0-9_.@%+-]+\/[A-Za-z0-9_.@%+\/-]+(\*|\/)?(:[0-9]+)?$/p' \
+        | sed -E 's/:([0-9]+)$//; s/[[:punct:]]+$//' \
+        | sed -E 's#^\./##; s#/\*$#/#; s#//+#/#g' \
+        | sed '/^$/d' \
+        | sort -u
+}
+
+tangle_scope_is_directory() {
+    local scope="$1"
+    local base
+    [[ "$scope" == */ ]] && return 0
+    [[ "$scope" == *"*"* ]] && return 0
+    base="${scope##*/}"
+    [[ "$base" != *.* ]]
+}
+
+tangle_scopes_overlap() {
+    local left="${1%/}"
+    local right="${2%/}"
+    [[ -z "$left" || -z "$right" ]] && return 1
+    [[ "$left" == "$right" ]] && return 0
+
+    if tangle_scope_is_directory "$1" && [[ "$right" == "$left"/* ]]; then
+        return 0
+    fi
+    if tangle_scope_is_directory "$2" && [[ "$left" == "$right"/* ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+tangle_validate_parallel_write_scopes() {
+    local subtasks="$1"
+    local task_index=0
+    local coding_count=0
+    local existing_scopes=()
+    local existing_tasks=()
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        [[ ! "$line" =~ ^[0-9]+[\.\)] ]] && continue
+
+        local subtask
+        subtask=$(echo "$line" | sed 's/^[0-9]*[\.\)]\s*//')
+        ((task_index++)) || true
+
+        if [[ "$subtask" =~ \[REASONING\] ]]; then
+            continue
+        fi
+
+        ((coding_count++)) || true
+        subtask=$(echo "$subtask" | sed 's/\[CODING\]\s*//; s/\[REASONING\]\s*//')
+
+        local scopes
+        scopes=$(tangle_extract_write_scopes "$subtask")
+        if [[ -z "$scopes" ]]; then
+            echo "coding subtask ${task_index} has no explicit file or directory write scope"
+            return 1
+        fi
+
+        while IFS= read -r scope; do
+            [[ -z "$scope" ]] && continue
+            local i
+            for i in "${!existing_scopes[@]}"; do
+                if tangle_scopes_overlap "$scope" "${existing_scopes[$i]}"; then
+                    echo "coding subtask ${task_index} write scope '${scope}' overlaps subtask ${existing_tasks[$i]} scope '${existing_scopes[$i]}'"
+                    return 1
+                fi
+            done
+            existing_scopes+=("$scope")
+            existing_tasks+=("$task_index")
+        done <<< "$scopes"
+    done <<< "$subtasks"
+
+    [[ $coding_count -eq 0 ]] && return 0
+    return 0
 }
 
 # Phase 3: TANGLE (Develop) - Enhanced map-reduce with validation
@@ -889,6 +974,8 @@ Each subtask should be:
 - Self-contained and independently verifiable
 - Clear about inputs and expected outputs
 - Assignable to either a coding agent [CODING] or reasoning agent [REASONING]
+- For every [CODING] subtask, include an explicit 'Files:' clause listing the exact files or directories that subtask owns and may edit
+- Coding write scopes must be disjoint. If two subtasks need the same file or directory, merge them into one [CODING] subtask instead of splitting them.
 
 **Cohesion rule:** If the task produces a single deliverable (one file, one script, one page, one config), keep it as ONE subtask — do not split it. Only decompose when subtasks are truly independent with no cross-file references between them. Aim for 2-6 subtasks; fewer is better when the work is tightly coupled.
 
@@ -900,7 +987,9 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
     subtasks=$(run_agent_sync "gemini" "$decompose_prompt" 120 "researcher" "tangle") || \
     subtasks=$(run_agent_sync "codex" "$decompose_prompt" 120 "researcher" "tangle") || {
         log WARN "Decomposition failed with all providers, falling back to direct execution"
-        spawn_agent "codex" "$resolved_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
+        local direct_prompt
+        direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because decomposition failed with all providers.")
+        spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
         return
     }
@@ -917,7 +1006,19 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
 
     if [[ $parseable_subtask_count -eq 0 ]]; then
         log WARN "Decomposition produced no parseable subtasks, falling back to direct execution"
-        spawn_agent "codex" "$resolved_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
+        local direct_prompt
+        direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because decomposition produced no parseable subtasks.")
+        spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
+        wait
+        return
+    fi
+
+    local parallel_safety_reason=""
+    if ! parallel_safety_reason=$(tangle_validate_parallel_write_scopes "$subtasks"); then
+        log WARN "Unsafe parallel decomposition: ${parallel_safety_reason}"
+        local direct_prompt
+        direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because parallel decomposition is unsafe: ${parallel_safety_reason}")
+        spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
         return
     fi

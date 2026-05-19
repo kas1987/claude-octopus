@@ -47,7 +47,7 @@ validate_tangle_results() { :; }
 
 run_agent_sync() {
     cat <<'EOF'
-1. [CODING] Template polish
+1. [CODING] Template polish. Files: src/lib/templates/NA10_HANDLE_SILENCE.ts
 2. [REASONING] Integration review
 EOF
 }
@@ -94,6 +94,7 @@ fi
 
 test_case "coding subtask prompts require direct edits and integration evidence"
 if [[ "$captured_prompts" == *"edit the repository files directly"* ]] && \
+   [[ "$captured_prompts" == *"exclusive write scope"* ]] && \
    [[ "$captured_prompts" == *"Tests alone are not integration evidence"* ]] && \
    [[ "$captured_prompts" == *"## Worktree Changes"* ]] && \
    [[ "$captured_prompts" == *"## Integration Evidence"* ]]; then
