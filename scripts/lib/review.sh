@@ -620,13 +620,13 @@ $(echo "$all_findings" | jq -c '.')
 Return ONLY valid JSON with 'findings' array including verdict field."
 
     local verified_findings
-    verified_findings=$(run_agent_sync "codex" "$verifier_prompt" 180 "code-reviewer" "review") && {
+    verified_findings=$(run_agent_sync "codex" "$verifier_prompt" "${TIMEOUT:-300}" "code-reviewer" "review") && {
         echo "codex|ok|Round 2 verification" >> "$provider_status_file"
     } || {
         log WARN "review_run: codex verifier failed, falling back to claude-sonnet"
         log "USER" "⚠ Round 2: Codex unavailable → claude-sonnet (fallback). Codex API usage will NOT change."
         echo "codex|fallback|Round 2 → claude-sonnet" >> "$provider_status_file"
-        verified_findings=$(run_agent_sync "claude-sonnet" "$verifier_prompt" 180 "code-reviewer" "review") || {
+        verified_findings=$(run_agent_sync "claude-sonnet" "$verifier_prompt" "${TIMEOUT:-300}" "code-reviewer" "review") || {
             log WARN "review_run: verification failed entirely, using all findings as confirmed"
             verified_findings="{\"findings\":$(echo "$all_findings" | \
                 jq 'map(. + {"verdict":"confirmed"})' 2>/dev/null || echo "[]")}"

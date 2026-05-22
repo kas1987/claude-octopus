@@ -455,7 +455,7 @@ Research findings:
 $results"
 
     local synthesis
-    synthesis=$(run_agent_sync "gemini" "$synthesis_prompt" 180) || {
+    synthesis=$(run_agent_sync "gemini" "$synthesis_prompt" "${TIMEOUT:-300}") || {
         log WARN "Synthesis failed, using compact fallback"
         synthesis=$(build_probe_fallback_synthesis "$original_prompt" "$result_count" "$usable_results" "$total_content_size" "$results")
     }
