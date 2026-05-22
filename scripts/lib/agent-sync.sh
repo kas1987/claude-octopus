@@ -84,8 +84,13 @@ run_agent_sync() {
     local role="${4:-}"   # Optional role override
     local phase="${5:-}"  # Optional phase context
 
-    # v8.19.0: Dynamic timeout calculation (when caller uses default 120)
-    if [[ "$timeout_secs" -eq 120 ]]; then
+    # OCTOPUS_AGENT_TIMEOUT env var overrides all caller-hardcoded values.
+    # Without this, callers passing explicit values (e.g. 300, 600) bypass the
+    # dynamic path and the env var has no effect — making it dead code (#410).
+    if [[ -n "${OCTOPUS_AGENT_TIMEOUT:-}" && "${OCTOPUS_AGENT_TIMEOUT}" =~ ^[0-9]+$ ]]; then
+        timeout_secs="$OCTOPUS_AGENT_TIMEOUT"
+    elif [[ "$timeout_secs" -eq 120 ]]; then
+        # v8.19.0: Dynamic timeout calculation (when caller uses default 120)
         local task_type_for_timeout
         task_type_for_timeout=$(classify_task "$prompt" 2>/dev/null) || task_type_for_timeout="standard"
         timeout_secs=$(compute_dynamic_timeout "$task_type_for_timeout" "$prompt")
@@ -360,6 +365,16 @@ ${provider_ctx}"
         _sync_status="${_classification%%:*}"
         _sync_reason="${_classification#*:}"
         if [[ "$_sync_status" == "failed" ]]; then
+            # Oversize rejections are a provider-input-size mismatch, not a hard
+            # run failure. Return 0 with empty output so multi-provider dispatch
+            # loops continue to gather perspectives from remaining providers (#410).
+            if [[ "$_sync_reason" == *"oversize"* || "$_sync_reason" == *"Prompt rejected by provider"* ]]; then
+                log WARN "Agent $agent_type prompt rejected as oversized — skipping provider (reduce session context or lower OCTOPUS_CONTEXT_BUDGET)"
+                type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "skipped" "$tokens_in" 0 "Prompt rejected by provider (oversize)" "$_elapsed_ms" "" "$role" || true
+                rm -f "$temp_err" "$temp_out"
+                echo ""
+                return 0
+            fi
             log ERROR "Agent $agent_type returned unusable output: $_sync_reason"
             type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" "$(octo_estimate_tokens_for_file "$temp_out" 2>/dev/null || echo 0)" "$_sync_reason" "$_elapsed_ms" "" "$role" || true
             rm -f "$temp_err" "$temp_out"
