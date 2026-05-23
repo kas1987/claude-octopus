@@ -133,7 +133,7 @@ Provider diversity still matters. A council of only top-ranked Anthropic rows ma
    - use `OCTOPUS_COUNCIL_DEDUP_THRESHOLD`, default `0.65`, as a tunable config constant rather than a claimed universal threshold;
    - if Jaccard overlap is greater than the configured threshold, keep the higher-scoring candidate unless the user explicitly selected both with `--persona` or the interactive selector.
    - persona packs being installed is not explicit user selection; pack-provided overlaps are still deduped.
-4. Score every eligible persona/provider/model tuple using the weighted normalized formula.
+4. Score every eligible persona/provider/model tuple using the weighted normalized formula. Role fit is derived first from `agents/config.yaml` capability and expertise tags mapped to the requested domain/goal, then from persona family and seat fallback heuristics.
 5. Fill required seats: chair, domain advisors, skeptic/red-team, implementer if implementation is allowed, verifier if implementation is allowed.
 6. Enforce diversity for standard/deep runs:
    - require at least two provider organizations when available;
@@ -622,7 +622,7 @@ Release validation:
 - BullshitBench metadata is checked in as a CSV/JSON snapshot and refreshed by `scripts/refresh-benchmarks.sh`; normal runtime does not fetch network data.
 - V1 uses semi-anonymized peer review: role labels are visible, model/provider names are hidden.
 - Deep-mode implementation produces and confirms a concrete plan first, then records a `tangle` handoff with worktree isolation when Gate A and Gate B are explicitly approved. It does not directly launch multiple implementation agents from the council phase.
-- MCP/OpenClaw exposure is included in v1 through the existing adapter surfaces.
+- MCP/OpenClaw exposure is included in v1 through the existing adapter surfaces. This is intentionally CLI/tool passthrough to the local Octopus council runtime, not a hosted Managed Agent, MCP Tunnel, or remote job service.
 
 ## Future Work
 

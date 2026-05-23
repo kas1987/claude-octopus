@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [9.40.3] - 2026-05-24
+
+### Changed
+
+- Extract `/octo:council` benchmark routing helpers into `scripts/lib/benchmark-routing.sh` and load them through the orchestrator and direct council library usage.
+- Score council role fit from `agents/config.yaml` capability and expertise tags before falling back to persona-family heuristics.
+- Document the v1 MCP/OpenClaw decision as local adapter passthrough rather than a hosted council service.
+
+### Fixed
+
+- Surface provider-diversity and chair-fallback council warnings in CLI output, with regression coverage.
+- Keep fixture-mode critique dispatch consistent with `OCTOPUS_COUNCIL_FAIL_PERSONAS`, with regression coverage.
+
 ## [9.40.2] - 2026-05-23
 
 ### Fixed

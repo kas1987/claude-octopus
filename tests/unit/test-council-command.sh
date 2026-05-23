@@ -39,6 +39,22 @@ test_council_orchestrate_route_exists() {
     fi
 }
 
+test_council_benchmark_routing_lib_is_extracted() {
+    test_case "Council benchmark routing lives in a dedicated lib"
+
+    local lib="$PROJECT_ROOT/scripts/lib/benchmark-routing.sh"
+    [[ -f "$lib" ]] || { test_fail "Missing $lib"; return 1; }
+
+    if grep -q 'council_benchmark_signal' "$lib" &&
+       grep -q 'benchmark-routing.sh' "$PROJECT_ROOT/scripts/orchestrate.sh" &&
+       ! grep -q '^council_benchmark_signal()' "$PROJECT_ROOT/scripts/lib/council.sh"; then
+        test_pass
+    else
+        test_fail "benchmark routing is not extracted cleanly"
+        return 1
+    fi
+}
+
 load_council_lib() {
     local lib="$PROJECT_ROOT/scripts/lib/council.sh"
     if [[ ! -f "$lib" ]]; then
@@ -322,6 +338,26 @@ test_council_scores_roster_with_benchmark_signal() {
     fi
 }
 
+test_council_role_fit_uses_agent_capability_tags() {
+    test_case "Council role fit uses agents/config.yaml capability tags"
+    load_council_lib || return 1
+
+    council_reset_defaults
+    COUNCIL_DOMAIN="product"
+    COUNCIL_GOAL="plan"
+
+    local business_fit backend_fit
+    business_fit="$(council_role_fit_signal "business-analyst" "advisor")"
+    backend_fit="$(council_role_fit_signal "backend-architect" "advisor")"
+
+    if awk -v business="$business_fit" -v backend="$backend_fit" 'BEGIN { exit !(business >= 0.90 && business > backend) }'; then
+        test_pass
+    else
+        test_fail "product planning should prefer business-analyst capability tags over backend fallback: business=$business_fit backend=$backend_fit"
+        return 1
+    fi
+}
+
 test_council_benchmark_freshness_decays() {
     test_case "Benchmark freshness decays after 30 days and reaches zero after 90"
     load_council_lib || return 1
@@ -547,6 +583,26 @@ test_council_critical_veto_aborts_implementation_run() {
     fi
 }
 
+test_council_diversity_warning_prints_to_cli() {
+    test_case "Council prints provider diversity warning to CLI"
+    load_council_lib || return 1
+
+    local tmp_dir out_file
+    tmp_dir="$(mktemp -d "$TEST_TMP_DIR/council-diversity-output.XXXXXX")"
+    out_file="$TEST_TMP_DIR/council-diversity-output.out"
+
+    OCTOPUS_COUNCIL_FIXTURE=full-success \
+    OCTOPUS_COUNCIL_PROVIDER_FIXTURE='claude:missing,codex:available,gemini:available' \
+        council_run --depth standard --domain security --output-dir "$tmp_dir" "Review auth" >"$out_file" 2>&1
+
+    if grep -q "Council warning: adjusted one non-chair seat" "$out_file"; then
+        test_pass
+    else
+        test_fail "provider diversity warning not printed"
+        return 1
+    fi
+}
+
 test_council_chair_fallback_preserves_quorum() {
     test_case "Council retries failed chair with synthesis-capable fallback"
     load_council_lib || return 1
@@ -567,6 +623,53 @@ test_council_chair_fallback_preserves_quorum() {
         test_pass
     else
         test_fail "chair fallback did not preserve quorum"
+        return 1
+    fi
+}
+
+test_council_chair_fallback_warning_prints_to_cli() {
+    test_case "Council prints chair fallback warning to CLI"
+    load_council_lib || return 1
+
+    local tmp_dir out_file
+    tmp_dir="$(mktemp -d "$TEST_TMP_DIR/council-chair-output.XXXXXX")"
+    out_file="$TEST_TMP_DIR/council-chair-output.out"
+
+    OCTOPUS_COUNCIL_FIXTURE=full-success \
+    OCTOPUS_COUNCIL_FAIL_PERSONAS='strategy-analyst' \
+    OCTOPUS_COUNCIL_PROVIDER_FIXTURE='claude:available,codex:available,gemini:available' \
+        council_run --depth quick --output-dir "$tmp_dir" "Review auth" >"$out_file" 2>&1
+
+    if grep -q "Council warning: chair fallback used" "$out_file"; then
+        test_pass
+    else
+        test_fail "chair fallback warning not printed"
+        return 1
+    fi
+}
+
+test_council_fixture_critique_honors_failed_persona() {
+    test_case "Council fixture critique honors failed persona filter"
+    load_council_lib || return 1
+
+    local tmp_dir
+    tmp_dir="$(mktemp -d "$TEST_TMP_DIR/council-critique-fail.XXXXXX")"
+
+    OCTOPUS_COUNCIL_FIXTURE=full-success \
+    OCTOPUS_COUNCIL_FAIL_PERSONAS='security-auditor' \
+    OCTOPUS_COUNCIL_PROVIDER_FIXTURE='claude:available,codex:available,gemini:available' \
+        council_run --depth standard --output-dir "$tmp_dir" "Review auth"
+
+    local run_dir summary security_critiques
+    run_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)"
+    summary="$run_dir/summary.json"
+    security_critiques="$(find "$run_dir/critiques" -type f -name '*security-auditor.md' | wc -l | tr -d ' ')"
+
+    if [[ "$security_critiques" -eq 0 ]] &&
+       jq -e '.status == "completed" and .quorum.met == true' "$summary" >/dev/null; then
+        test_pass
+    else
+        test_fail "failed persona should not produce fixture critique artifact"
         return 1
     fi
 }
@@ -840,6 +943,7 @@ test_council_dispatch_strips_blocked_env_but_sets_readonly() {
 
 test_council_command_files_are_registered
 test_council_orchestrate_route_exists
+test_council_benchmark_routing_lib_is_extracted
 test_council_defaults_are_depth_aware
 test_council_rejects_non_usd_budget
 test_council_dry_run_writes_summary_json
@@ -854,6 +958,7 @@ test_council_roster_matches_resolved_members
 test_council_persona_pin_affects_roster
 test_council_enforces_provider_diversity_when_available
 test_council_scores_roster_with_benchmark_signal
+test_council_role_fit_uses_agent_capability_tags
 test_council_benchmark_freshness_decays
 test_council_refresh_benchmarks_fetches_upstream_sources
 test_council_skill_documents_gates
@@ -865,6 +970,9 @@ test_council_after_approval_does_not_handoff_without_gate
 test_council_approved_gates_start_worktree_handoff
 test_council_critical_veto_aborts_implementation_run
 test_council_chair_fallback_preserves_quorum
+test_council_diversity_warning_prints_to_cli
+test_council_chair_fallback_warning_prints_to_cli
+test_council_fixture_critique_honors_failed_persona
 test_council_cost_cap_aborts_before_fanout
 test_council_cost_cap_aborts_before_critique
 test_council_deep_fixture_writes_revision_artifacts
