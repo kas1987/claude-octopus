@@ -46,12 +46,12 @@ if [[ "${1:-}" == "--exit-code" ]]; then
   exit 0
 fi
 
-if [[ "${1:-}" == "--json" ]]; then
+print_json_output() {
+  local count="${#RESULT_LINES[@]}"
   echo "{"
   echo "  \"providers_ready\": $PROVIDERS_READY,"
   echo "  \"providers_degraded\": $PROVIDERS_DEGRADED,"
   echo "  \"results\": ["
-  local count="${#RESULT_LINES[@]}"
   for i in "${!RESULT_LINES[@]}"; do
     local comma=","
     [[ $((i + 1)) -eq $count ]] && comma=""
@@ -61,6 +61,10 @@ if [[ "${1:-}" == "--json" ]]; then
   done
   echo "  ]"
   echo "}"
+}
+
+if [[ "${1:-}" == "--json" ]]; then
+  print_json_output
   exit 0
 fi
 
