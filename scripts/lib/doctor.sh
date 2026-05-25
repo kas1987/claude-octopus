@@ -77,6 +77,9 @@ cmd_update_clis() {
 }
 
 doctor_check_providers() {
+    # Load version floor constants and octo_version_ok() comparator
+    local _octo_root="${OCTO_ROOT:-$(git -C "$(pwd)" rev-parse --show-toplevel 2>/dev/null)}"
+    source "${_octo_root}/scripts/lib/provider-versions.sh" 2>/dev/null || true
     # Claude Code version + compatibility
     local cc_ver="${CLAUDE_CODE_VERSION:-}"
     if [[ -n "$cc_ver" ]]; then
@@ -92,9 +95,9 @@ doctor_check_providers() {
         local codex_ver codex_path
         codex_ver=$(codex --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
         codex_path=$(command -v codex)
-        if [[ "$codex_ver" != "unknown" ]] && [[ "$codex_ver" =~ ^0\.(([0-9]{1,2})|9[0-9])\. ]]; then
+        if ! octo_version_ok "${codex_ver}" "${OCTO_CODEX_MIN_VERSION:-0.100.0}"; then
             doctor_add "codex-cli" "providers" "warn" \
-                "Codex CLI v${codex_ver} (outdated)" \
+                "Codex CLI v${codex_ver} (outdated, min: v${OCTO_CODEX_MIN_VERSION:-0.100.0})" \
                 "${codex_path} — run orchestrate.sh update-clis or: npm install -g @openai/codex"
         else
             doctor_add "codex-cli" "providers" "pass" \
@@ -110,8 +113,11 @@ doctor_check_providers() {
         local gemini_ver gemini_path
         gemini_ver=$(gemini --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
         gemini_path=$(command -v gemini)
-        doctor_add "gemini-cli" "providers" "pass" \
-            "Gemini CLI v${gemini_ver}" "$gemini_path"
+        if ! octo_version_ok "${gemini_ver}" "${OCTO_GEMINI_MIN_VERSION:-1.0.0}"; then
+            doctor_add "gemini-cli" "providers" "warn" \n                "Gemini CLI v${gemini_ver} (outdated, min: v${OCTO_GEMINI_MIN_VERSION:-1.0.0})" \n                "${gemini_path} — npm install -g @google/gemini-cli"
+        else
+            doctor_add "gemini-cli" "providers" "pass" \n                "Gemini CLI v${gemini_ver}" "$gemini_path"
+        fi
     else
         doctor_add "gemini-cli" "providers" "warn" \
             "Gemini CLI not installed" "npm install -g @google/gemini-cli"
@@ -158,7 +164,11 @@ doctor_check_providers() {
         elif command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
             copilot_auth="gh-cli"
         fi
-        if [[ "$copilot_auth" != "none" ]]; then
+        local gh_ver
+        gh_ver=$(timeout 3 gh --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+        if ! octo_version_ok "${gh_ver}" "${OCTO_GH_MIN_VERSION:-2.0.0}"; then
+            doctor_add "copilot-cli" "providers" "warn" \n                "gh CLI v${gh_ver} (outdated, min: v${OCTO_GH_MIN_VERSION:-2.0.0})" \n                "$(command -v gh) — gh extension upgrade --all"
+        elif [[ "$copilot_auth" != "none" ]]; then
             doctor_add "copilot-cli" "providers" "pass" \
                 "Copilot CLI installed (auth: ${copilot_auth})" "$(command -v copilot) — research/exploration via copilot -p"
         else
@@ -180,8 +190,12 @@ doctor_check_providers() {
         elif [[ -n "${QWEN_API_KEY:-}" ]]; then
             qwen_auth="env:QWEN_API_KEY"
         fi
-        if [[ "$qwen_auth" != "none" ]]; then
-            doctor_add "qwen-cli" "providers" "pass" \
+        local qwen_ver
+        qwen_ver=$(timeout 3 qwen --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+        if ! octo_version_ok "${qwen_ver}" "${OCTO_QWEN_MIN_VERSION:-9.10.0}"; then
+            doctor_add "qwen-cli" "providers" "warn" \n                "Qwen CLI v${qwen_ver} (outdated, min: v${OCTO_QWEN_MIN_VERSION:-9.10.0})" \n                "$(command -v qwen) — npm install -g @qwen-code/qwen-code"
+        elif [[ "$qwen_auth" != "none" ]]; then
+            doctor_add "qwen-cli" "providers" "warn" \n                "Qwen CLI v${qwen_ver} (outdated, min: v${OCTO_QWEN_MIN_VERSION:-9.10.0})" \n                "$(command -v qwen) — npm install -g @qwen-code/qwen-code"
                 "Qwen CLI installed (auth: ${qwen_auth})" "$(command -v qwen) — free-tier research via Qwen OAuth"
         else
             doctor_add "qwen-cli" "providers" "warn" \
@@ -236,6 +250,11 @@ doctor_check_providers() {
 
     # OpenCode CLI (optional — multi-provider router, v9.11.0)
     if command -v opencode &>/dev/null; then
+        local opencode_ver
+        opencode_ver=$(timeout 3 opencode --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+        if ! octo_version_ok "${opencode_ver}" "${OCTO_OPENCODE_MIN_VERSION:-0.1.0}"; then
+            doctor_add "opencode-version" "providers" "warn" "OpenCode v${opencode_ver} (below floor v${OCTO_OPENCODE_MIN_VERSION:-0.1.0})" "$(command -v opencode) — npm install -g opencode-ai"
+        fi
         local opencode_auth="none"
         # Portable timeout: prefer gtimeout (macOS via coreutils), fallback to timeout
         local _timeout_cmd="timeout"

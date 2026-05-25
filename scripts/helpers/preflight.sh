@@ -7,6 +7,9 @@
 #   bash scripts/helpers/preflight.sh --exit-code # exits 0 if Claude available (always)
 #   bash scripts/helpers/preflight.sh --json      # JSON output for scripting
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+CHECK_VERSIONS="${SCRIPT_DIR}/check-versions.sh"
+
 PROVIDERS_READY=0
 PROVIDERS_DEGRADED=0
 declare -a RESULT_LINES
@@ -48,6 +51,11 @@ fi
 
 print_json_output() {
   local count="${#RESULT_LINES[@]}"
+  local ver_json
+  ver_json="{}"
+  if [[ -f "$CHECK_VERSIONS" ]]; then
+    ver_json=$(bash "$CHECK_VERSIONS" --json 2>/dev/null) || ver_json='{"any_below_floor":false,"results":[]}'
+  fi
   echo "{"
   echo "  \"providers_ready\": $PROVIDERS_READY,"
   echo "  \"providers_degraded\": $PROVIDERS_DEGRADED,"
@@ -56,10 +64,11 @@ print_json_output() {
     local comma=","
     [[ $((i + 1)) -eq $count ]] && comma=""
     local label
-    label=$(echo "${RESULT_LINES[$i]}" | sed "s/^[[:space:]]*[✅⚠️ ]*//" | xargs)
+    label=$(echo "${RESULT_LINES[$i]}" | sed "s/^[[:space:]]*//" | sed "s/^[^A-Za-z]*//" | xargs)
     echo "    {\"name\": \"${label}\", \"status\": \"${RESULT_STATUSES[$i]}\"}${comma}"
   done
-  echo "  ]"
+  echo "  ],"
+  echo "  \"versions\": ${ver_json}"
   echo "}"
 }
 
@@ -82,5 +91,11 @@ if [[ $PROVIDERS_READY -eq 1 ]]; then
 elif [[ $PROVIDERS_READY -ge 3 ]]; then
   echo "  🚀 Multi-provider mode active. Run /octo:embrace for full orchestration."
 fi
+
+# Version floor section
+if [[ -f "$CHECK_VERSIONS" ]]; then
+  bash "$CHECK_VERSIONS" 2>/dev/null || true
+fi
+
 echo ""
 exit 0
