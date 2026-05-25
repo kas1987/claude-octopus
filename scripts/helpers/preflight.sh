@@ -10,6 +10,20 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 CHECK_VERSIONS="${SCRIPT_DIR}/check-versions.sh"
 
+# Portable timeout: prefer gtimeout (macOS), fallback to timeout, finally no-op.
+_octo_timeout_cmd=""
+if command -v gtimeout >/dev/null 2>&1; then
+  _octo_timeout_cmd="gtimeout"
+elif command -v timeout >/dev/null 2>&1; then
+  _octo_timeout_cmd="timeout"
+fi
+
+# json_escape STRING - emit a JSON-safe string body (no surrounding quotes).
+# Handles backslash, double quote, and control characters via Python.
+json_escape() {
+  python3 -c "import json,sys; print(json.dumps(sys.argv[1])[1:-1])" "$1" 2>/dev/null || printf "%s" "$1"
+}
+
 PROVIDERS_READY=0
 PROVIDERS_DEGRADED=0
 declare -a RESULT_LINES
@@ -21,7 +35,12 @@ check_provider() {
   local timeout_s="${3:-2}"
   local icon
 
-  if timeout "$timeout_s" bash -c "$check_cmd" &>/dev/null 2>&1; then
+  if [[ -n "$_octo_timeout_cmd" ]]; then
+    "$_octo_timeout_cmd" "$timeout_s" bash -c "$check_cmd" &>/dev/null 2>&1
+  else
+    bash -c "$check_cmd" &>/dev/null 2>&1
+  fi
+  if [[ $? -eq 0 ]]; then
     icon="✅"
     ((PROVIDERS_READY++))
     RESULT_STATUSES+=("available")
@@ -65,6 +84,7 @@ print_json_output() {
     [[ $((i + 1)) -eq $count ]] && comma=""
     local label
     label=$(echo "${RESULT_LINES[$i]}" | sed "s/^[[:space:]]*//" | sed "s/^[^A-Za-z]*//" | xargs)
+    label=$(json_escape "$label")
     echo "    {\"name\": \"${label}\", \"status\": \"${RESULT_STATUSES[$i]}\"}${comma}"
   done
   echo "  ],"
