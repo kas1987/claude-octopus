@@ -146,10 +146,24 @@ doctor_check_providers() {
         local ollama_health
         ollama_health=$(curl -sf http://localhost:11434/api/tags 2>/dev/null) || true
         if [[ -n "$ollama_health" ]]; then
-            local model_count
+            local model_count stale_count
             model_count=$(printf '%s' "$ollama_health" | grep -c '"name"' 2>/dev/null || echo "0")
-            doctor_add "ollama" "providers" "pass" \
-                "Ollama running (${model_count} models)" "http://localhost:11434"
+            # Check model staleness via check-ollama-models.sh (Pre-mortem F2: sanitize to integer)
+            stale_count=0
+            local _check="${_octo_root}/scripts/helpers/check-ollama-models.sh"
+            if [[ -x "$_check" ]]; then
+                stale_count=$(bash "$_check" --count-stale 2>/dev/null)
+                stale_count=$(printf '%s' "$stale_count" | grep -oE '^[0-9]+$' || echo "0")
+                stale_count="${stale_count:-0}"
+            fi
+            if [[ "$stale_count" -gt 0 ]]; then
+                doctor_add "ollama" "providers" "warn" \
+                    "Ollama running (${model_count} models, ${stale_count} stale)" \
+                    "Run: ollama pull <model> to refresh stale models (threshold: ${OCTO_OLLAMA_STALE_DAYS:-30}d)"
+            else
+                doctor_add "ollama" "providers" "pass" \
+                    "Ollama running (${model_count} models)" "http://localhost:11434"
+            fi
         else
             doctor_add "ollama" "providers" "warn" \
                 "Ollama installed but server not running" "Run: ollama serve"
